@@ -67,3 +67,17 @@ app.post("/participants", async (req, res) => {
 app.listen(5000, () => {
   console.log("Rodando em http://localhost:5000");
 });
+
+app.get("/participants", async (req, res) => {
+  try {
+    await mongoClient.connect();
+    const uol = mongoClient.db("batepapouol");
+    const participants = uol.collection("participants");
+    let online = [];
+    online = await participants.find({}).toArray();
+    res.send(online);
+  } catch {
+    res.sendStatus(500);
+  }
+  mongoClient.close();
+});
