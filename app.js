@@ -83,6 +83,11 @@ app.get("/participants", async (req, res) => {
 });
 
 app.post("/messages", async (req, res) => {
+  const messageSchema = joi.object({
+    to: joi.string().required(),
+    text: joi.string().required(),
+    type: joi.string().allow("message", "private_message").required(),
+  });
   const validation = messageSchema.validate(req.body);
 
   if (validation.error) {
@@ -149,4 +154,29 @@ app.get("/messages", async (req, res) => {
     res.sendStatus(500);
   }
   mongoClient.close();
+});
+
+app.post("/status", async (req, res) => {
+  try {
+    const username = req.headers.user;
+    await mongoClient.connect();
+    const uol = mongoClient.db("batepapouol");
+    const participants = uol.collection("participants");
+    const validate = await participants.findOne({ name: username });
+    if (validate) {
+      await participants.updateOne(
+        { _id: validate._id },
+        { $set: { lastStatus: Date.now() } }
+      );
+      res.sendStatus(200);
+      mongoClient.close();
+    } else {
+      res.sendStatus(404);
+      mongoClient.close();
+      return;
+    }
+  } catch (error) {
+    res.sendStatus(500);
+    mongoClient.close();
+  }
 });
