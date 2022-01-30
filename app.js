@@ -1,6 +1,6 @@
 import express, { json } from "express";
 import cors from "cors";
-import { MongoClient, ObjectId } from "mongodb";
+import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 import dayjs from "dayjs";
@@ -119,4 +119,34 @@ app.post("/messages", async (req, res) => {
     res.sendStatus(500);
     mongoClient.close();
   }
+});
+
+app.get("/messages", async (req, res) => {
+  const limit = parseInt(req.query.limit);
+  const username = req.headers.user;
+
+  try {
+    await mongoClient.connect();
+    const uol = mongoClient.db("batepapouol");
+    const messages = uol.collection("messages");
+    const chat = await messages.find({}).toArray();
+
+    const userMsgs = chat.filter(
+      (msg) => msg.to === username || msg.from === username
+    );
+    if (!limit) {
+      res.send(userMsgs);
+    } else {
+      if (limit > userMsgs.length) {
+        res.send(userMsgs);
+        return;
+      } else {
+        const selecteds = [...userMsgs].reverse().slice(0, limit);
+        res.send(selecteds.reverse());
+      }
+    }
+  } catch (error) {
+    res.sendStatus(500);
+  }
+  mongoClient.close();
 });
