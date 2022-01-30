@@ -81,3 +81,42 @@ app.get("/participants", async (req, res) => {
   }
   mongoClient.close();
 });
+
+app.post("/messages", async (req, res) => {
+  const validation = messageSchema.validate(req.body);
+
+  if (validation.error) {
+    res.status(422).send(
+      validation.error.details.map((erro) => {
+        erro.message;
+      })
+    );
+    mongoClient.close();
+    return;
+  }
+
+  try {
+    const username = req.headers.user;
+    await mongoClient.connect();
+    const uol = mongoClient.db("batepapouol");
+    const participants = uol.collection("participants");
+    const messages = uol.collection("messages");
+    const validate = await participants.findOne({ name: username });
+
+    if (validate) {
+      await messages.insertOne({
+        ...req.body,
+        from: username,
+        time: dayjs(Date.now().format("HH:mm:ss")),
+      });
+      res.sendStatus(201);
+      mongoClient.close();
+    } else {
+      res.sendStatus(422).send("Envie um formato válido");
+      mongoClient.close();
+    }
+  } catch (error) {
+    res.sendStatus(500);
+    mongoClient.close();
+  }
+});
