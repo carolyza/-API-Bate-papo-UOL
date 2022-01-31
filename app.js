@@ -9,13 +9,16 @@ dotenv.config();
 
 const app = express();
 const mongoClient = new MongoClient(process.env.MONGO_URI);
+let db;
+mongoClient.connect(() => {
+  db = mongoClient.db("batepapouol");
+});
 
 app.use(cors());
 app.use(json());
 
 app.post("/participants", async (req, res) => {
   try {
-    await mongoClient.connect();
     const uol = mongoClient.db("batepapouol");
     const participants = uol.collection("participants");
     const messages = uol.collection("messages");
@@ -40,7 +43,6 @@ app.post("/participants", async (req, res) => {
       } else {
         res.status(422).send("Favor inserir um nome");
       }
-      mongoClient.close();
       return;
     }
 
@@ -60,13 +62,10 @@ app.post("/participants", async (req, res) => {
   } catch {
     res.sendStatus(500);
   }
-
-  mongoClient.close();
 });
 
 app.get("/participants", async (req, res) => {
   try {
-    await mongoClient.connect();
     const uol = mongoClient.db("batepapouol");
     const participants = uol.collection("participants");
     let online = [];
@@ -75,14 +74,13 @@ app.get("/participants", async (req, res) => {
   } catch {
     res.sendStatus(500);
   }
-  mongoClient.close();
 });
 
 app.post("/messages", async (req, res) => {
   const messageSchema = joi.object({
     to: joi.string().required(),
     text: joi.string().required(),
-    type: joi.string().allow("message", "private_message").required(),
+    type: joi.valid("message", "private_message"),
   });
   const validation = messageSchema.validate(req.body);
 
@@ -92,33 +90,31 @@ app.post("/messages", async (req, res) => {
         erro.message;
       })
     );
-    mongoClient.close();
     return;
   }
 
   try {
-    const username = req.headers.user;
-    await mongoClient.connect();
+    const username = req.header("User");
+
     const uol = mongoClient.db("batepapouol");
     const participants = uol.collection("participants");
     const messages = uol.collection("messages");
-    const validate = await participants.findOne({ name: username });
+    const validate = participants.find({ name: username });
 
     if (validate) {
       await messages.insertOne({
-        ...req.body,
         from: username,
-        time: dayjs(Date.now().format("HH:mm:ss")),
+        to: req.body.to,
+        text: req.body.text,
+        type: req.body.type,
+        time: dayjs().format("HH:mm:ss"),
       });
       res.sendStatus(201);
-      mongoClient.close();
     } else {
-      res.sendStatus(422).send("Envie um formato válido");
-      mongoClient.close();
+      res.status(422).send("Envie um formato válido");
     }
   } catch (error) {
     res.sendStatus(500);
-    mongoClient.close();
   }
 });
 
@@ -127,13 +123,13 @@ app.get("/messages", async (req, res) => {
   const username = req.headers.user;
 
   try {
-    await mongoClient.connect();
     const uol = mongoClient.db("batepapouol");
     const messages = uol.collection("messages");
     const chat = await messages.find({}).toArray();
 
     const userMsgs = chat.filter(
-      (msg) => msg.to === username || msg.from === username
+      (msg) =>
+        msg.to === username || msg.from === username || msg.to === "Todos"
     );
     if (!limit) {
       res.send(userMsgs);
@@ -149,37 +145,34 @@ app.get("/messages", async (req, res) => {
   } catch (error) {
     res.sendStatus(500);
   }
-  mongoClient.close();
 });
 
 app.post("/status", async (req, res) => {
   try {
-    const username = req.headers.user;
-    await mongoClient.connect();
+    const username = req.header("User");
+
     const uol = mongoClient.db("batepapouol");
     const participants = uol.collection("participants");
     const validate = await participants.findOne({ name: username });
+
     if (validate) {
       await participants.updateOne(
         { _id: validate._id },
         { $set: { lastStatus: Date.now() } }
       );
       res.sendStatus(200);
-      mongoClient.close();
     } else {
       res.sendStatus(404);
-      mongoClient.close();
+
       return;
     }
   } catch (error) {
     res.sendStatus(500);
-    mongoClient.close();
   }
 });
 
 setInterval(async () => {
   try {
-    await mongoClient.connect();
     const uol = mongoClient.db("batepapouol");
     const participants = uol.collection("participants");
     const messages = uol.collection("messages");
@@ -197,7 +190,6 @@ setInterval(async () => {
         });
       }
     }
-    mongoClient.close();
   } catch (error) {
     console.log(error);
   }
